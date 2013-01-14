@@ -18,3 +18,6 @@ TODO:
   * create mock functions
   * handle inner `define`s/named `let`s
 
+As well as trying to produce something useful as a PLT Games entry, I'm also trying
+to learn: [`syntax/parse`][].
+[`syntax/parse`]: http://docs.racket-lang.org/syntax/stxparse.html?q=syntax/parse
