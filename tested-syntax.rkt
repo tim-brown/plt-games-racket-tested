@@ -1,34 +1,47 @@
 #lang racket
-(require (for-syntax syntax/parse syntax/quote))
 
-(module+ main)
+(provide (except-out (all-from-out racket)
+                     #%module-begin)
+         (all-from-out rackunit)
+         (rename-out [module-begin #%module-begin])
+         define/tested)
 
-(module+ test
-  (require rackunit))
+(require rackunit)
+(require (for-syntax syntax/parse))
 
-; type of a test-clause is either
-;  - 
+;(module+ main)
+
+(module+ mock)
+
+;(module+ test (require rackunit))
 (define-syntax (define/tested stx)
   
   (define-splicing-syntax-class tests
     #:attributes (check mock)
-
-    (pattern (~seq #:test-= name (id arg ...) rhs)
-             #:with check #'(check-= (id arg ...) rhs 0 name)
-             #:with mock  #'[(equal? (list arg ...) mock-args) rhs])
     
-    #;(pattern (~seq #:test-equal? name val (_ arg ...)))
-    #;(pattern (~seq #:test-true?  name (pred-left ...+) (_ arg ...)))
-    #;(pattern (~seq #:test-false? name (pred-left ...+) (_ arg ...)))
+    (pattern (~seq #:test-= name (id arg ...) rhs)
+             #:with check (syntax/loc stx (check-= (id arg ...) rhs 0 name))
+             #:with mock  (syntax/loc stx  [(equal? (list arg ...) mock-args) rhs]))
+    
+    (pattern (~seq #:test-equal? name (id arg ...) rhs)
+             #:with check (syntax/loc stx (check-equal? (id arg ...) rhs name))
+             #:with mock  (syntax/loc stx  [(equal? (list arg ...) mock-args) rhs]))
+    
+    (pattern (~seq #:test-true? name (id arg ...) rhs)
+             #:with check (syntax/loc stx (check-true? (id arg ...)))
+             #:with mock  (syntax/loc stx  [(equal? (list arg ...) mock-args) #t]))
+    
+    (pattern (~seq #:test-false? name (_ arg ...) rhs)
+             #:with check (syntax/loc stx (check-false? (id arg ...) name))
+             #:with mock  (syntax/loc stx  [(equal? (list arg ...) mock-args) #f]))
     )
   
   (syntax-parse
    stx
-   [(_ (id args ...) t:tests ...+ #:body content ...+)
+   #:context stx
+   [(_ (id args ...) t:tests ...+ content:expr ...+)
     #`(begin
-        (module+ test
-          t.check
-          ...)
+        (module+ test t.check ...)
         (module+ mock
           (provide id)
           (define (id . mock-args)
@@ -37,18 +50,27 @@
               ...
               [else (error (format "unmocked value for: ~s" '(id args ...)))])))
         (provide id)
-          (define (id args ...)
-          content ...))]))
-
-(define/tested (add2 a #:offset (offset 0))
-  #:test-= "two and two is/are four -- elementary" (add2 2) 4
-  ;#:test-= "crappy failing test" (add2 2 #:offset 1) 7
-  ; #:test-equal? "two and two is/are four but we can offset a bit" (= 5) (add2 2 #:offset 1)
-  ; #:test-= "crappy failing test" (= 6) (add2 2 #:offset 1)
-  ; #:test-false? "crappy failing test" (add2 2 #:offset 1)
-  #:body (+ a 2 offset))
+        (define (id args ...) content ...))]
+   [(_ (id args ...) t:tests ...+)
+    #`(begin
+        (module+ mock
+          (provide id)
+          (define (id . mock-args)
+            (cond
+              t.mock
+              ...
+              [else (error (format "unmocked value for: ~s" '(id args ...)))])))
+        #;(require (only-in 'mock id))
+        )]))
 
 #|
-(require (prefix-in mok: (submod "." mock)))
-mok:add2
+(require (prefix-in mok: (submod "." mock))) mok:add2 (mok:add2 2)
 |#
+(define-syntax (module-begin stx)
+  (syntax-parse stx #:context stx
+                [(module-begin expr ...)
+                 #`(#%module-begin
+                    ;#,@MOCKS
+                    ;#,@IMPLS
+                    ;#,@TESTS
+                    expr ...)]))
