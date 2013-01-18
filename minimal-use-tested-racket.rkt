@@ -1,5 +1,7 @@
-#lang racket
-(require "test-tested-syntax.rkt")
+#lang reader "minimal-tested-racket.rkt"
 
-(add2 3)
-(fact 4)
+(define/tested (add2 a #:offset (offset 0))
+  #:test-= "two and two is/are four -- elementary" (add2 2) 4
+  (+ a 2 offset))
+
+(add2 2)
